@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ASCII matrix rain">
+  <title>ASCII 字元雨</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --matrix: #40ff72;
+      --matrix-soft: rgba(64, 255, 114, .2);
+      --ink: #000;
+      --panel-bg: rgba(6, 14, 8, .82);
+      --panel-border: rgba(110, 255, 141, .35);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      overflow: hidden;
+      font-family: ui-monospace, "Courier New", monospace;
+      color: #fff;
+      background: var(--ink);
+    }
+
+    #matrix {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #000;
+    }
+
+    #panelToggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 3;
+      padding: 8px 12px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      color: var(--matrix);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+    }
+    #panelToggle:hover,
+    #panelToggle:focus-visible { border-color: var(--matrix); }
+
+    #settingsPanel {
+      position: fixed;
+      top: 60px;
+      right: 16px;
+      z-index: 2;
+      width: 260px;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+      padding: 16px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    #settingsPanel[hidden] { display: none; }
+
+    #settingsPanel fieldset {
+      border: 0;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #settingsPanel legend {
+      color: var(--matrix);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      padding: 0;
+    }
+    #settingsPanel label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      color: #cfe;
+    }
+    #settingsPanel .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    #settingsPanel input[type="range"] { width: 100%; accent-color: var(--matrix); }
+    #settingsPanel input[type="color"] {
+      width: 36px;
+      height: 24px;
+      padding: 0;
+      border: 1px solid var(--panel-border);
+      border-radius: 4px;
+      background: none;
+    }
+    #settingsPanel input[type="text"] {
+      width: 100%;
+      padding: 6px 8px;
+      background: rgba(0,0,0,.4);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      color: #fff;
+      font: inherit;
+    }
+    #settingsPanel button {
+      padding: 6px 10px;
+      background: rgba(64,255,114,.12);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      color: var(--matrix);
+      font: inherit;
+      cursor: pointer;
+    }
+    #settingsPanel button:hover,
+    #settingsPanel button:focus-visible { border-color: var(--matrix); }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+      flex: none;
+    }
+    .switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+    .switch .track {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,.15);
+      border-radius: 999px;
+      transition: background .15s ease;
+    }
+    .switch .thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform .15s ease;
+    }
+    .switch input:checked + .track { background: var(--matrix); }
+    .switch input:checked + .track .thumb { transform: translateX(16px); }
+    .switch input:focus-visible + .track { outline: 2px solid var(--matrix); outline-offset: 2px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="matrix" aria-hidden="true"></canvas>
+
+  <button id="panelToggle" type="button" aria-expanded="true" aria-controls="settingsPanel">✕ 關閉設定</button>
+
+  <div id="settingsPanel">
+    <fieldset>
+      <legend>動畫</legend>
+      <label for="ctrlSpeed">
+        <span class="row"><span>下落速度</span><span id="valSpeed">1.5</span></span>
+        <input type="range" id="ctrlSpeed" min="0.3" max="4" step="0.1" value="1.5">
+      </label>
+      <label for="ctrlFontSize">
+        <span class="row"><span>字體大小</span><span id="valFontSize">16</span></span>
+        <input type="range" id="ctrlFontSize" min="10" max="28" step="1" value="16">
+      </label>
+      <label for="ctrlDensity">
+        <span class="row"><span>欄位密度</span><span id="valDensity">0.50</span></span>
+        <input type="range" id="ctrlDensity" min="0.3" max="1.2" step="0.05" value="0.5">
+      </label>
+      <label for="ctrlTrail">
+        <span class="row"><span>殘影長度</span><span id="valTrail">0.08</span></span>
+        <input type="range" id="ctrlTrail" min="0.03" max="0.3" step="0.01" value="0.08">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>顏色</legend>
+      <label for="ctrlColorBright">
+        <span class="row"><span>亮點色</span>
+          <input type="color" id="ctrlColorBright" value="#d9ffd9">
+        </span>
+      </label>
+      <label for="ctrlColorNormal">
+        <span class="row"><span>一般色</span>
+          <input type="color" id="ctrlColorNormal" value="#6eff8d">
+        </span>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>播放</legend>
+      <label class="row" for="ctrlPlay">
+        <span>播放動畫</span>
+        <span class="switch">
+          <input type="checkbox" id="ctrlPlay" checked>
+          <span class="track"><span class="thumb"></span></span>
+        </span>
+      </label>
+      <label class="row" for="ctrlAscii">
+        <span>ASCII 字元（含英數符號）</span>
+        <span class="switch">
+          <input type="checkbox" id="ctrlAscii" checked>
+          <span class="track"><span class="thumb"></span></span>
+        </span>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>顯示文字</legend>
+      <label for="ctrlText">
+        <span>輸入要顯示的文字</span>
+        <input type="text" id="ctrlText" placeholder="例如：HELLO WORLD" maxlength="40">
+      </label>
+      <label for="ctrlTextSize">
+        <span class="row"><span>文字大小</span><span id="valTextSize">320</span></span>
+        <input type="range" id="ctrlTextSize" min="60" max="800" step="10" value="320">
+      </label>
+      <button type="button" id="ctrlTextApply">套用文字</button>
+      <button type="button" id="ctrlTextClear">清除文字</button>
+    </fieldset>
+
+    <button type="button" id="ctrlReset">重置為預設值</button>
+  </div>
+
+  <script>
+    const canvas = document.querySelector('#matrix');
+    const context = canvas.getContext('2d');
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    const GLYPH_SETS = {
+      binary: '01',
+      ascii: Array.from({ length: 0x7e - 0x21 + 1 }, (_, i) => String.fromCharCode(0x21 + i)).join('')
+    };
+    let glyphs = GLYPH_SETS.ascii;
+
+    const DEFAULTS = {
+      dropIncrement: 1.5,
+      fontSize: 16,
+      spacing: 0.5,
+      trailAlpha: 0.08,
+      colorBright: '#d9ffd9',
+      colorNormal: '#6eff8d',
+      textSize: 320
+    };
+
+    let columns = [];
+    let fontSize = DEFAULTS.fontSize;
+    let spacing = DEFAULTS.spacing;
+    let dropIncrement = DEFAULTS.dropIncrement;
+    let trailAlpha = DEFAULTS.trailAlpha;
+    let colorBright = DEFAULTS.colorBright;
+    let colorNormal = DEFAULTS.colorNormal;
+    let paused = reducedMotion.matches;
+
+    let customText = '';
+    let textSize = DEFAULTS.textSize;
+    let textMask = null;
+    let textRowTop = 0;
+    let textRowSpan = 1;
+    let textWaveLen = 16;
+    let textPhase = 0;
+
+    function resizeCanvas() {
+      const ratio = Math.min(devicePixelRatio || 1, 2);
+      canvas.width = innerWidth * ratio;
+      canvas.height = innerHeight * ratio;
+      canvas.style.width = `${innerWidth}px`;
+      canvas.style.height = `${innerHeight}px`;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      const columnCount = Math.ceil(innerWidth / (fontSize * spacing));
+      columns = Array(columnCount).fill(0).map(() => Math.random() * -100);
+      if (customText) buildTextMask();
+    }
+
+    function drawMatrix() {
+      context.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`;
+      context.fillRect(0, 0, innerWidth, innerHeight);
+      context.font = `${fontSize}px ui-monospace, monospace`;
+      context.textAlign = 'left';
+      context.textBaseline = 'alphabetic';
+
+      const cellW = fontSize * spacing;
+      columns.forEach((drop, index) => {
+        const glyph = glyphs[Math.floor(Math.random() * glyphs.length)];
+        const x = index * cellW;
+        const y = drop * fontSize;
+
+        context.fillStyle = Math.random() > 0.82 ? colorBright : colorNormal;
+        context.fillText(glyph, x, y);
+
+        if (y > innerHeight && Math.random() > 0.92) {
+          columns[index] = 0;
+        } else {
+          columns[index] = drop + dropIncrement;
+        }
+      });
+
+      if (textMask) {
+        const cellH = fontSize;
+        const waveLen = textWaveLen;
+        textPhase = (textPhase + dropIncrement) % textRowSpan;
+        textMask.forEach((key) => {
+          const commaIndex = key.indexOf(',');
+          const col = Number(key.slice(0, commaIndex));
+          const row = Number(key.slice(commaIndex + 1));
+
+          const head = textRowTop + ((textPhase + col * 2.4) % textRowSpan);
+          const dist = head - row;
+          if (dist < 0 || dist > waveLen) return;
+
+          const glyph = glyphs[Math.floor(Math.random() * glyphs.length)];
+          context.fillStyle = Math.random() > 0.82 ? colorBright : colorNormal;
+          context.fillText(glyph, col * cellW, (row + 1) * cellH);
+        });
+      }
+    }
+
+    function applyText(raw) {
+      customText = (raw || '').trim();
+      buildTextMask();
+    }
+
+    function buildTextMask() {
+      textMask = null;
+      if (!customText) return;
+
+      const off = document.createElement('canvas');
+      off.width = innerWidth;
+      off.height = innerHeight;
+      const octx = off.getContext('2d');
+
+      octx.font = `bold ${textSize}px ui-monospace, monospace`;
+      octx.fillStyle = '#fff';
+      octx.textAlign = 'center';
+      octx.textBaseline = 'middle';
+      octx.fillText(customText, innerWidth / 2, innerHeight / 2);
+
+      const cellW = fontSize * spacing;
+      const cellH = fontSize;
+      const colCount = Math.ceil(innerWidth / cellW);
+      const rowCount = Math.ceil(innerHeight / cellH);
+      const pixels = octx.getImageData(0, 0, innerWidth, innerHeight).data;
+
+      const mask = new Set();
+      for (let row = 0; row < rowCount; row++) {
+        for (let col = 0; col < colCount; col++) {
+          const cx = Math.min(innerWidth - 1, Math.round(col * cellW + cellW / 2));
+          const cy = Math.min(innerHeight - 1, Math.round(row * cellH + cellH / 2));
+          let hit = false;
+          for (let dy = -3; dy <= 3 && !hit; dy += 3) {
+            for (let dx = -3; dx <= 3 && !hit; dx += 3) {
+              const px = Math.min(innerWidth - 1, Math.max(0, cx + dx));
+              const py = Math.min(innerHeight - 1, Math.max(0, cy + dy));
+              if (pixels[(py * innerWidth + px) * 4 + 3] > 120) hit = true;
+            }
+          }
+          if (hit) mask.add(col + ',' + row);
+        }
+      }
+      textMask = mask;
+
+      let minRow = Infinity;
+      let maxRow = -Infinity;
+      mask.forEach((key) => {
+        const r = Number(key.slice(key.indexOf(',') + 1));
+        if (r < minRow) minRow = r;
+        if (r > maxRow) maxRow = r;
+      });
+      const textHeight = Math.max(1, maxRow - minRow);
+      textWaveLen = Math.max(12, Math.round(textHeight * 0.55));
+      textRowTop = minRow - Math.max(40, textHeight);
+      textRowSpan = (maxRow + 6) - textRowTop;
+    }
+
+    function animate() {
+      if (!paused) drawMatrix();
+      requestAnimationFrame(animate);
+    }
+
+    addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    requestAnimationFrame(animate);
+
+    const panelToggle = document.querySelector('#panelToggle');
+    const settingsPanel = document.querySelector('#settingsPanel');
+    function setPanelOpen(open) {
+      settingsPanel.hidden = !open;
+      panelToggle.setAttribute('aria-expanded', String(open));
+      panelToggle.textContent = open ? '✕ 關閉設定' : '⚙ 設定';
+    }
+    panelToggle.addEventListener('click', () => {
+      setPanelOpen(settingsPanel.hidden);
+    });
+
+    const ctrlSpeed = document.querySelector('#ctrlSpeed');
+    const valSpeed = document.querySelector('#valSpeed');
+    ctrlSpeed.addEventListener('input', () => {
+      dropIncrement = Number(ctrlSpeed.value);
+      valSpeed.textContent = dropIncrement.toFixed(1);
+    });
+
+    const ctrlFontSize = document.querySelector('#ctrlFontSize');
+    const valFontSize = document.querySelector('#valFontSize');
+    ctrlFontSize.addEventListener('input', () => {
+      fontSize = Number(ctrlFontSize.value);
+      valFontSize.textContent = String(fontSize);
+      resizeCanvas();
+    });
+
+    const ctrlDensity = document.querySelector('#ctrlDensity');
+    const valDensity = document.querySelector('#valDensity');
+    ctrlDensity.addEventListener('input', () => {
+      spacing = Number(ctrlDensity.value);
+      valDensity.textContent = spacing.toFixed(2);
+      resizeCanvas();
+    });
+
+    const ctrlTrail = document.querySelector('#ctrlTrail');
+    const valTrail = document.querySelector('#valTrail');
+    ctrlTrail.addEventListener('input', () => {
+      trailAlpha = Number(ctrlTrail.value);
+      valTrail.textContent = trailAlpha.toFixed(2);
+    });
+
+    document.querySelector('#ctrlColorBright').addEventListener('input', (e) => {
+      colorBright = e.target.value;
+    });
+    document.querySelector('#ctrlColorNormal').addEventListener('input', (e) => {
+      colorNormal = e.target.value;
+    });
+
+    document.querySelector('#ctrlPlay').addEventListener('change', (e) => {
+      paused = !e.target.checked;
+    });
+
+    const ctrlAscii = document.querySelector('#ctrlAscii');
+    ctrlAscii.addEventListener('change', (e) => {
+      glyphs = e.target.checked ? GLYPH_SETS.ascii : GLYPH_SETS.binary;
+    });
+
+    const ctrlText = document.querySelector('#ctrlText');
+    const ctrlTextSize = document.querySelector('#ctrlTextSize');
+    const valTextSize = document.querySelector('#valTextSize');
+    ctrlTextSize.addEventListener('input', () => {
+      textSize = Number(ctrlTextSize.value);
+      valTextSize.textContent = String(textSize);
+      if (customText) buildTextMask();
+    });
+    document.querySelector('#ctrlTextApply').addEventListener('click', () => {
+      applyText(ctrlText.value);
+    });
+    ctrlText.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') applyText(ctrlText.value);
+    });
+    document.querySelector('#ctrlTextClear').addEventListener('click', () => {
+      customText = '';
+      textMask = null;
+      ctrlText.value = '';
+    });
+
+    document.querySelector('#ctrlReset').addEventListener('click', () => {
+      dropIncrement = DEFAULTS.dropIncrement;
+      fontSize = DEFAULTS.fontSize;
+      spacing = DEFAULTS.spacing;
+      trailAlpha = DEFAULTS.trailAlpha;
+      colorBright = DEFAULTS.colorBright;
+      colorNormal = DEFAULTS.colorNormal;
+      paused = reducedMotion.matches;
+      glyphs = GLYPH_SETS.ascii;
+      customText = '';
+      textSize = DEFAULTS.textSize;
+      textMask = null;
+
+      ctrlSpeed.value = dropIncrement; valSpeed.textContent = dropIncrement.toFixed(1);
+      ctrlFontSize.value = fontSize; valFontSize.textContent = String(fontSize);
+      ctrlDensity.value = spacing; valDensity.textContent = spacing.toFixed(2);
+      ctrlTrail.value = trailAlpha; valTrail.textContent = trailAlpha.toFixed(2);
+      document.querySelector('#ctrlColorBright').value = colorBright;
+      document.querySelector('#ctrlColorNormal').value = colorNormal;
+      document.querySelector('#ctrlPlay').checked = !paused;
+      ctrlAscii.checked = true;
+      ctrlText.value = '';
+      ctrlTextSize.value = textSize; valTextSize.textContent = String(textSize);
+
+      resizeCanvas();
+    });
+  </script>
+</body>
+</html>
