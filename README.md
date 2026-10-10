@@ -5,6 +5,8 @@
 
 **線上展示：** https://speedthunder.github.io/matrix-rain/
 
+**自己做一個：** 照 [Matrix-rain-Prompt.md](Matrix-rain-Prompt.md) 的 Step 1–9 逐步複製貼上給 AI，就能重現這個專案。
+
 ![預覽](preview.jpg)
 
 ## 功能
